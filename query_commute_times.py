@@ -39,6 +39,12 @@ class CommuteTimesClass:
     def get_estimated_time(self, departure_address, arrival_address, **kwargs):
         url = self.build_url(departure_address, arrival_address, **kwargs)
         res = requests.get(url)
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            raise ValueError(f"Caught exception ", e, "with url\n", url)
+        # if res.response != 200:
+        #     raise ValueError(f"Invalid response code for following url:\n{url}")
         return res.json()['routes'][0]['legs'][0]['duration_in_traffic']['value']/60
 
     def find_depart_time(self, departure_address, arrival_address, target_arrival_time, 
@@ -134,15 +140,62 @@ class CommuteTimesClass:
             print(tohome_string)
             print('-'*len(tohome_string))
             subsubprint(subtohome)
-            print('-'*80)
+            # print('-'*80)
 
         for key in towork:
             subprint(towork[key], tohome[key], key)
 
+    def get_commute_times(self, address, local_info, year, month, first_day, ndays, timezone, 
+        models=['pessimistic', 'optimistic', 'best_guess'], do_print=True, 
+        return_model='best_guess', return_reduction=lambda x:  sum(x)/len(x)):
+
+        from collections import defaultdict
+        from tqdm import tqdm
+
+        towork = defaultdict(lambda: defaultdict(list))
+        tohome = defaultdict(lambda: defaultdict(list))
+        pbar = tqdm(total=len(local_info)*len(models)*ndays, desc="Commutes calculated")
+        count = 0
+
+        for name, info in local_info.items():
+            for day in range(first_day, first_day + ndays):
+                for model in models:
+                    ## to work:
+                    time = timezone.localize(datetime(year, month, day, 
+                        hour=info['arrival_hour'], minute=info['arrival_minute']))
+
+                    towork[name][model].append(
+                        self.find_commute_to_work_length(
+                            address, info['address'], time, traffic_model=model))
+
+                    ## to home
+                    time = timezone.localize(datetime(year, month, day, 
+                        hour=info['departure_hour'], minute=info['departure_minute']))
+
+                    tohome[name][model].append(
+                        self.get_estimated_time(
+                            info['address'], address, departure_time=time, traffic_model=model))
+
+                    ## update the progress bar
+                    pbar.update()
+
+        if do_print:
+            string = f"Commutes from {address}"
+            dots = "="*((80 - len(string))//2 - 2)
+            print(dots + ' ' + string + ' ' + dots)
+            self.pretty_print(towork, tohome, local_info)
+
+        if return_model is not None:
+            assert return_model in ['best_guess', 'optimistic', 'pessimistic']
+        res = {}
+        for name in towork:
+            res[name+'_towork'] = return_reduction(towork[name][return_model])
+            res[name+'_tohome'] = return_reduction(tohome[name][return_model])
+        return res
+
+
 def main():
-    from collections import defaultdict
     from argparse import ArgumentParser
-    from tqdm import tqdm
     import os
     import yaml
     import pytz
@@ -158,6 +211,7 @@ def main():
     parser.add_argument('--month', default=8, type=int)
     parser.add_argument('--first_day', default=6, help="Start on Aug 6 2019, a Tuesday", type=int)
     parser.add_argument('--ndays', default=4, help="How many days to run for (i.e. work week)", type=int)
+    parser.add_argument('--return_model', default='best_guess', help="Model to print over-arching summary for")
 
     args = parser.parse_args()
 
@@ -177,29 +231,20 @@ def main():
         import tzlocal
         timezone = tzlocal.get_localzone()
 
-    towork = defaultdict(lambda: defaultdict(list))
-    tohome = defaultdict(lambda: defaultdict(list))
-
     CommuteTimes = CommuteTimesClass(key=key)
+    res = CommuteTimes.get_commute_times(args.address, local_info, 
+        args.year, args.month, args.first_day, args.ndays, 
+        timezone, return_model=args.return_model)
 
-    for (name, info) in tqdm(local_info.items(), desc="People completed", position=0):
-        for day in tqdm(range(args.first_day, args.first_day + args.ndays), desc='Days', position=1):
-            for model in tqdm(['optimistic', 'pessimistic', 'best_guess'], desc="model", position=2):
-                ## to work:
-                time = timezone.localize(datetime(args.year, args.month, day, 
-                    hour=info['arrival_hour'], minute=info['arrival_minute']))
-                towork[name][model].append(CommuteTimes.find_commute_to_work_length(args.address, info['address'], time, traffic_model=model))
-
-                ## to home
-                time = timezone.localize(datetime(args.year, args.month, day, 
-                    hour=info['departure_hour'], minute=info['departure_minute']))
-                tohome[name][model].append(CommuteTimes.get_estimated_time(info['address'], args.address, 
-                    departure_time=time, traffic_model=model))
-
-    string = f"Commutes from {args.address}"
-    dots = "="*((80 - len(string))//2 - 2)
-    print(dots + ' ' + string + ' ' + dots)
-    CommuteTimes.pretty_print(towork, tohome, local_info)
+    print()
+    print(f"Average lengths over {args.ndays} days using the {args.return_model} model:")
+    spaces = ' '*4
+    print(" "*10 + '|'+ spaces + 'to work' + spaces + '|' + spaces + 'to home')
+    print('-'*(22+15*2))
+    for name in local_info.keys():
+        tw = str(int(round(res[name+'_towork']))).center(15)
+        th = str(int(round(res[name+'_tohome']))).center(15)
+        print(name.ljust(10)+'|' + tw + '|' + th)
 
 if __name__ == "__main__":
     main()
