@@ -9,6 +9,7 @@
 import numpy as np
 from collections import defaultdict
 import os, yaml, pytz, pickle
+from tqdm import tqdm
 
 basedir = os.path.realpath(__file__).rsplit('/', 1)[0]
 api_file = basedir+'/api_key'
@@ -53,7 +54,7 @@ states = list(reader.records())
 CA, = [state for state in states if state.attributes['name'] == 'California']
 geom = CA.geometry
 
-npts = 33
+npts = 3
 
 xv = np.linspace(western_limit, eastern_limit, npts)
 yv = np.linspace(southern_limit, northern_limit, npts)
@@ -65,20 +66,21 @@ result = defaultdict(list)
 names = local_info.keys()
 
 keys = [n+'_towork' for n in names] + [n+'_tohome' for n in names] + ['lat', 'long']
-for ii, (ll, la) in enumerate(pairs):
+for ii, (ll, la) in enumerate(tqdm(pairs)):
     # if bm.is_land(ll, la):
     if mask[ii]:
-        result['lat'] = la
-        result['long'] = ll
+        result['lat'].append(la)
+        result['long'].append(ll)
         try:
             address = f'{la},{ll}'
             res = CommuteTimes.get_commute_times(address, local_info, 
-                2019, 8, 7, 2, timezone, models=['best_guess'])
+                2019, 8, 7, 2, timezone, models=['best_guess'], 
+                do_print=False, do_pbar=False)
 
             for key in res:
                 result[key].append(res[key])
         except ValueError:
-            for key in filter(keys, lambda x: x not in ['lat', 'long']):
+            for key in filter(lambda x: x not in ['lat', 'long'], keys):
                 result[key].append(np.nan)
     else:
         for key in keys:
@@ -88,8 +90,9 @@ for ii, (ll, la) in enumerate(pairs):
                 result[key].append(ll)
             else:
                 result[key].append(np.nan)
+    # print(result)
         
 print("Writing output...")
-with open('commute_times.pkl', 'w') as out:
+with open('commute_times.pkl', 'wb') as out:
     pickle.dump(result, out)
 print("Done!")

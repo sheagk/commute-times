@@ -10,7 +10,8 @@ class CommuteTimesClass:
         self.KEY = key
 
     def escaped_string(self, string):
-        return '+'.join(string.replace(',','').split())
+        # return '+'.join(string.replace(',','').split())
+        return '+'.join(string.split())
 
     def datetime_to_unix(self, dt):
         return str(int(dt.timestamp()))
@@ -45,7 +46,12 @@ class CommuteTimesClass:
             raise ValueError(f"Caught exception ", e, "with url\n", url)
         # if res.response != 200:
         #     raise ValueError(f"Invalid response code for following url:\n{url}")
-        return res.json()['routes'][0]['legs'][0]['duration_in_traffic']['value']/60
+        try:
+            travel_time = res.json()['routes'][0]['legs'][0]['duration_in_traffic']['value']/60
+        except IndexError:
+            raise ValueError(f"Failed to get a route from {departure_address} to {arrival_address} with url:\n{url}")
+
+        return travel_time
 
     def find_depart_time(self, departure_address, arrival_address, target_arrival_time, 
         guess=45, early_tolerance=7, late_tolerance=0, initial_step=20, 
@@ -146,16 +152,18 @@ class CommuteTimesClass:
             subprint(towork[key], tohome[key], key)
 
     def get_commute_times(self, address, local_info, year, month, first_day, ndays, timezone, 
-        models=['pessimistic', 'optimistic', 'best_guess'], do_print=True, 
+        models=['pessimistic', 'optimistic', 'best_guess'], do_print=True, do_pbar=True,
         return_model='best_guess', return_reduction=lambda x:  sum(x)/len(x)):
 
         from collections import defaultdict
-        from tqdm import tqdm
 
         towork = defaultdict(lambda: defaultdict(list))
         tohome = defaultdict(lambda: defaultdict(list))
-        pbar = tqdm(total=len(local_info)*len(models)*ndays, desc="Commutes calculated")
-        count = 0
+
+        if do_pbar:
+            from tqdm import tqdm
+            pbar = tqdm(total=len(local_info)*len(models)*ndays, desc="Commutes calculated")
+            count = 0
 
         for name, info in local_info.items():
             for day in range(first_day, first_day + ndays):
@@ -176,8 +184,9 @@ class CommuteTimesClass:
                         self.get_estimated_time(
                             info['address'], address, departure_time=time, traffic_model=model))
 
-                    ## update the progress bar
-                    pbar.update()
+                    if do_pbar:
+                        ## update the progress bar
+                        pbar.update()
 
         if do_print:
             string = f"Commutes from {address}"
@@ -192,7 +201,6 @@ class CommuteTimesClass:
             res[name+'_towork'] = return_reduction(towork[name][return_model])
             res[name+'_tohome'] = return_reduction(tohome[name][return_model])
         return res
-
 
 def main():
     from argparse import ArgumentParser
