@@ -11,8 +11,9 @@ your configuration file and create an API key.
 First, create a Google API Key and enable both the Directions and Maps JavaScript 
 APIs.  You'll also need to enable a billing account, but don't worry -- you get 
 a $300 credit to start with, and the Maps API give you an additional $200 credit
-each month.  Even in debugging, testing, and usage, I never went through more than
-about $30 of that monthly credit.
+each month.  I went through a tiny fraction of that credit in debugging and testing,
+but running the grid search with 50 points on a side (see below) ran through the
+entire monthly credit and half of the free trial, so be careful with that!
 
 Second, create your configuration file.  It should look like:
 
