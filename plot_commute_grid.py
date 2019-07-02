@@ -25,7 +25,7 @@ def plot_patches_on_gmap(vertex_xcoords, vertex_ycoords, values,
         api_key, color_mapper, map_options=None, title=None):
 
     plot = bk.gmap(api_key, map_options=map_options, title=title)
-    plot.add_tools(PanTool(), WheelZoomTool(), BoxSelectTool(), ResetTool())
+    plot.add_tools(PanTool(), WheelZoomTool(), ResetTool())
 
     source_patches = bk.ColumnDataSource(
         data=dict(xs=vertex_xcoords, ys=vertex_ycoords,
