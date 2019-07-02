@@ -11,7 +11,7 @@ import shapely.vectorized
 import shapely.geometry as sgeom
 import cartopy.io.shapereader as shpreader
 
-from query_commute_times import CommuteTimesClass
+from commute_times import CommuteTimesClass
 from load_config import load_config
 
 ## all of CA:
