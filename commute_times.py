@@ -212,8 +212,6 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("address", help="Address to calculate commutes to/from")
     parser.add_argument('-c', '--config_filename', dest='config_filename', help="Config file with private info", default=None)
-    # parser.add_argument('-k', '--keyfile', help="One-line text file with Google API key", default=basedir+'/api_key', dest='keyfile')
-    parser.add_argument('--key', default=None, help="Google API key (over-rides -k option)", dest='key')
     parser.add_argument('--year', default=2019, type=int)
     parser.add_argument('--month', default=8, type=int)
     parser.add_argument('--first_day', default=6, help="Start on Aug 6 2019, a Tuesday", type=int)

@@ -7,9 +7,6 @@ import argparse
 from tqdm import tqdm
 
 import numpy as np
-import shapely.vectorized
-import shapely.geometry as sgeom
-import cartopy.io.shapereader as shpreader
 
 from commute_times import CommuteTimesClass
 from load_config import load_config
@@ -21,9 +18,9 @@ from load_config import load_config
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('outname')
-    parser.add_argument('--config_filename', default=None, help="File with api key, commutes, and optionally timezone")
-    parser.add_argument('--state_name', default="California", help="State to use for the boundary to distinguish land from water")
-    parser.add_argument('--npts', default=10, type=int)
+    parser.add_argument('-c', '--config_filename', dest='config_filename', help="Config file with private info", default=None)
+    parser.add_argument('--state_name', default="California", help="State to use for the boundary to distinguish land from water.  Points outside the state are discarded")
+    parser.add_argument('--npts', default=25, type=int, help="Number of points on each side of the grid (i.e. will use npts**2 points total)")
     parser.add_argument('--northern_limit', default=34.219498, type=float)
     parser.add_argument('--southern_limit', default=33.816168, type=float)
     parser.add_argument('--eastern_limit', default=-118.254013, type=float)
@@ -35,20 +32,28 @@ def main():
     CommuteTimes = CommuteTimesClass(key=config['api_key'])
     commutes = config['commutes']
 
-    shpfilename = shpreader.natural_earth(resolution='10m',
-                                          category='cultural',
-                                          name='admin_1_states_provinces')
-    reader = shpreader.Reader(shpfilename)
-    states = list(reader.records())
-
-    state, = [state for state in states if state.attributes['name'] == args.state_name]
-    geom = state.geometry
-
     xv = np.linspace(args.western_limit, args.eastern_limit, args.npts)
     yv = np.linspace(args.southern_limit, args.northern_limit, args.npts)
     pairs = np.array(np.meshgrid(xv, yv)).T.reshape(-1, 2)
     xvals, yvals = pairs.T
-    mask = shapely.vectorized.contains(geom, xvals, yvals)
+
+    if args.state_name.lower() != 'none':
+        import shapely.vectorized
+        import shapely.geometry as sgeom
+        import cartopy.io.shapereader as shpreader
+
+        shpfilename = shpreader.natural_earth(resolution='10m',
+                                              category='cultural',
+                                              name='admin_1_states_provinces')
+        reader = shpreader.Reader(shpfilename)
+        states = list(reader.records())
+
+        state, = [state for state in states if state.attributes['name'] == args.state_name]
+        geom = state.geometry
+
+        mask = shapely.vectorized.contains(geom, xvals, yvals)
+    else:
+        mask = np.ones(xvals.size, dtype=bool)
 
     result = defaultdict(list)
     names = commutes.keys()

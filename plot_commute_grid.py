@@ -49,9 +49,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('pickle_dump')
     parser.add_argument('output_file')
-    parser.add_argument('--config_filename', default=None, help="path to file with config+commute info")
-    parser.add_argument('--center_lat', default=34.053695, type=float, help="latitude to center on")
-    parser.add_argument('--center_lng', default=-118.430208, type=float, help="longitutde to center on")
+    parser.add_argument('-c', '--config_filename', dest='config_filename', help="Config file with private info", default=None)
+    parser.add_argument('--center_lat', default=34.053695, help="latitude to center on")
+    parser.add_argument('--center_lng', default=-118.430208, help="longitutde to center on")
     parser.add_argument('--zoom', default=11, type=int, help="initial zoom of maps.  goes 1 (least zoomed) to 20 (most zoomed)")
     parser.add_argument('--map_type', default='roadmap', help="initial zoom of maps.  goes 1 (least zoomed) to 20 (most zoomed)")    
     parser.add_argument('--palette', default='Viridis', help="Palette to use.  Must be in bokeh.palettes.all_palettes")
@@ -79,6 +79,16 @@ def main():
     xcoords = [[xc-dx, xc-dx, xc+dx, xc+dx] for xc in center_longs]
     ycoords = [[yc-dy, yc+dy, yc+dy, yc-dy] for yc in center_lats]
     print(f"Plotting {len(xcoords)} squares")
+
+    try:
+        args.center_lat = float(args.center_lat)
+    except ValueError:
+        args.center_lat = (min([yc[0] for yc in ycoords]) + max([yc[1] for yc in ycoords]))/2
+
+    try:
+        args.center_lng = float(args.center_lng)
+    except ValueError:
+        args.center_lng = (min([xc[0] for xc in ycoords]) + max([xc[2] for xc in ycoords]))/2        
 
     plots = []
     bk.output_file(args.output_file, title="Commute times") , #mode="inlne")
