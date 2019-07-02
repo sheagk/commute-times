@@ -121,7 +121,7 @@ class CommuteTimesClass:
         transit_time = (target_arrival_time - departure_time).total_seconds()/60
         return transit_time
 
-    def pretty_print(self, towork, tohome, local_info):
+    def pretty_print(self, towork, tohome, commutes):
         def subprint(subtowork, subtohome, key):
             def subsubprint(dictionary):        
                 pess = dictionary['pessimistic']
@@ -137,12 +137,12 @@ class CommuteTimesClass:
             dots = '-'*((80 - lablength - 2)//2)
             print()
             print(dots+' '+label+' '+dots)
-            towork_string = f"Commute to work (arriving by {local_info[key]['arrival_hour'] % 12}:{str(local_info[key]['arrival_minute']).zfill(2)})"
+            towork_string = f"Commute to work (arriving by {commutes[key]['arrival_hour'] % 12}:{str(commutes[key]['arrival_minute']).zfill(2)})"
             print(towork_string)
             print('-'*len(towork_string))
             subsubprint(subtowork)
             print()
-            tohome_string = f"Commute home (leaving at {local_info[key]['departure_hour'] % 12}:{str(local_info[key]['departure_minute']).zfill(2)})"
+            tohome_string = f"Commute home (leaving at {commutes[key]['departure_hour'] % 12}:{str(commutes[key]['departure_minute']).zfill(2)})"
             print(tohome_string)
             print('-'*len(tohome_string))
             subsubprint(subtohome)
@@ -151,9 +151,10 @@ class CommuteTimesClass:
         for key in towork:
             subprint(towork[key], tohome[key], key)
 
-    def get_commute_times(self, address, local_info, year, month, first_day, ndays, timezone, 
+    def get_commute_times(self, address, commutes, year, month, first_day, ndays, timezone, 
         models=['pessimistic', 'optimistic', 'best_guess'], do_print=True, do_pbar=True,
-        return_model='best_guess', return_reduction=lambda x:  sum(x)/len(x)):
+        return_model='best_guess', return_reduction=lambda x:  sum(x)/len(x), 
+        initial_guess_for_commute_length=45, initial_step=25):
 
         from collections import defaultdict
 
@@ -162,10 +163,10 @@ class CommuteTimesClass:
 
         if do_pbar:
             from tqdm import tqdm
-            pbar = tqdm(total=len(local_info)*len(models)*ndays, desc="Commutes calculated")
+            pbar = tqdm(total=len(commutes)*len(models)*ndays, desc="Commutes calculated")
             count = 0
 
-        for name, info in local_info.items():
+        for name, info in commutes.items():
             for day in range(first_day, first_day + ndays):
                 for model in models:
                     ## to work:
@@ -174,7 +175,8 @@ class CommuteTimesClass:
 
                     towork[name][model].append(
                         self.find_commute_to_work_length(
-                            address, info['address'], time, traffic_model=model))
+                            address, info['address'], time, traffic_model=model,
+                            guess=initial_guess_for_commute_length, initial_step=initial_step))
 
                     ## to home
                     time = timezone.localize(datetime(year, month, day, 
@@ -188,11 +190,12 @@ class CommuteTimesClass:
                         ## update the progress bar
                         pbar.update()
 
+
         if do_print:
             string = f"Commutes from {address}"
             dots = "="*((80 - len(string))//2 - 2)
             print(dots + ' ' + string + ' ' + dots)
-            self.pretty_print(towork, tohome, local_info)
+            self.pretty_print(towork, tohome, commutes)
 
         if return_model is not None:
             assert return_model in ['best_guess', 'optimistic', 'pessimistic']
@@ -204,16 +207,12 @@ class CommuteTimesClass:
 
 def main():
     from argparse import ArgumentParser
-    import os
-    import yaml
-    import pytz
-
-    basedir = os.path.realpath(__file__).rsplit('/', 1)[0]
+    from load_config import load_config
 
     parser = ArgumentParser()
     parser.add_argument("address", help="Address to calculate commutes to/from")
-    parser.add_argument('-p', '--private', help="Config file with private info", default=basedir+'/private_info.txt', dest='pifile')
-    parser.add_argument('-k', '--keyfile', help="One-line text file with Google API key", default=basedir+'/api_key', dest='keyfile')
+    parser.add_argument('-c', '--config_filename', dest='config_filename', help="Config file with private info", default=None)
+    # parser.add_argument('-k', '--keyfile', help="One-line text file with Google API key", default=basedir+'/api_key', dest='keyfile')
     parser.add_argument('--key', default=None, help="Google API key (over-rides -k option)", dest='key')
     parser.add_argument('--year', default=2019, type=int)
     parser.add_argument('--month', default=8, type=int)
@@ -223,24 +222,27 @@ def main():
 
     args = parser.parse_args()
 
+    config, timezone = load_config(args.config_filename)
+    commutes = config['commutes']
+    api_key = config['api_key']
     ### parse our inputs:
-    if args.key is None:
-        with open(args.keyfile, 'r') as f:
-            key = f.readline()
-    else:
-        key = args.key
+    # if args.key is None:
+    #     with open(args.keyfile, 'r') as f:
+    #         key = f.readline()
+    # else:
+    #     key = args.key
 
-    with open(args.pifile, 'r') as f:
-        local_info = yaml.load(f)
+    # with open(args.pifile, 'r') as f:
+    #     commutes = yaml.load(f)
 
-    if 'timezone' in local_info:
-        timezone = pytz.timezone(local_info.pop('timezone'))
-    else:
-        import tzlocal
-        timezone = tzlocal.get_localzone()
+    # if 'timezone' in commutes:
+    #     timezone = pytz.timezone(commutes.pop('timezone'))
+    # else:
+    #     import tzlocal
+    #     timezone = tzlocal.get_localzone()
 
-    CommuteTimes = CommuteTimesClass(key=key)
-    res = CommuteTimes.get_commute_times(args.address, local_info, 
+    CommuteTimes = CommuteTimesClass(key=api_key)
+    res = CommuteTimes.get_commute_times(args.address, commutes, 
         args.year, args.month, args.first_day, args.ndays, 
         timezone, return_model=args.return_model)
 
@@ -249,7 +251,7 @@ def main():
     spaces = ' '*4
     print(" "*10 + '|'+ spaces + 'to work' + spaces + '|' + spaces + 'to home')
     print('-'*(22+15*2))
-    for name in local_info.keys():
+    for name in commutes.keys():
         tw = str(int(round(res[name+'_towork']))).center(15)
         th = str(int(round(res[name+'_tohome']))).center(15)
         print(name.ljust(10)+'|' + tw + '|' + th)

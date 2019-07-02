@@ -3,9 +3,7 @@
 import os
 import pickle
 import numpy as np
-import argparse
 from itertools import product
-from collections import OrderedDict
 
 import bokeh.plotting as bk
 from bokeh.io import export_png
@@ -13,86 +11,97 @@ from bokeh.models import map_plots, Range1d, GMapOptions
 from bokeh.models.glyphs import Patches, Line, Circle
 from bokeh.models import HoverTool, PanTool, WheelZoomTool, BoxSelectTool, ResetTool, ColorBar
 from bokeh.models.mappers import ColorMapper, LinearColorMapper
-from bokeh.palettes import Viridis256
+from bokeh.palettes import all_palettes
 from bokeh.layouts import gridplot
+
+from load_config import load_config
 
 def restructure_key(key):
     name,dest = key.split('_')
     dest = 'to '+dest[2:]
     return name + ' ' + dest
 
-basedir = os.path.realpath(__file__).rsplit('/', 1)[0]
-api_file = basedir+'/api_key'
-with open(api_file, 'r') as f:
-    api_key = f.readline()
+def plot_patches_on_gmap(vertex_xcoords, vertex_ycoords, values, 
+        api_key, color_mapper, map_options=None, title=None):
 
-parser = argparse.ArgumentParser()
-parser.add_argument('pickle_dump')
-parser.add_argument('output_file')
-args = parser.parse_args()
+    plot = bk.gmap(api_key, map_options=map_options, title=title)
+    plot.add_tools(PanTool(), WheelZoomTool(), BoxSelectTool(), ResetTool())
 
-with open(args.pickle_dump, 'rb') as f:
-    print(f"Loading from {args.pickle_dump}")
-    data = pickle.load(f)
+    source_patches = bk.ColumnDataSource(
+        data=dict(xs=vertex_xcoords, ys=vertex_ycoords,
+                  colors=values))
 
-center_lats = np.array(data.pop('lat'))
-center_longs = np.array(data.pop('long'))
-names = set(k.split('_')[0] for k in data)
+    patches_glyph = plot.patches('xs', 'ys', fill_alpha=0.25, 
+        fill_color={"field": "colors", "transform": color_mapper},
+        line_color='black', line_width=0, source=source_patches)
 
-dx = np.max(center_longs[1:] - center_longs[:-1])/2
-dy = np.max(center_lats[1:] - center_lats[:-1])/2
+    color_bar = ColorBar(color_mapper=color_mapper, 
+        border_line_color=None, location=(0,0), scale_alpha=0.25,
+        title="minutes")
 
-xcoords = [[xc-dx, xc-dx, xc+dx, xc+dx] for xc in center_longs]
-ycoords = [[yc-dy, yc+dy, yc+dy, yc-dy] for yc in center_lats]
-print(f"Plotting {len(xcoords)} squares")
+    plot.add_layout(color_bar, 'right')
+    return plot
 
-plots = []
-bk.output_file(args.output_file, title="Commute times") , #mode="inlne")
-moptions = GMapOptions(lat=34.053695, lng=-118.430208, zoom=13, map_type="roadmap")
+def main():
+    import argparse
+    from load_config import load_config
 
-allkeys = [f'{name}_{destkey}' for name, destkey in product(names, ['towork', 'tohome'])]
-dsets = {restructure_key(key): data[key] for key in allkeys}
+    parser = argparse.ArgumentParser()
+    parser.add_argument('pickle_dump')
+    parser.add_argument('output_file')
+    parser.add_argument('--config_filename', default=None, help="path to file with config+commute info")
+    parser.add_argument('--center_lat', default=34.053695, type=float, help="latitude to center on")
+    parser.add_argument('--center_lng', default=-118.430208, type=float, help="longitutde to center on")
+    parser.add_argument('--zoom', default=11, type=int, help="initial zoom of maps.  goes 1 (least zoomed) to 20 (most zoomed)")
+    parser.add_argument('--map_type', default='roadmap', help="initial zoom of maps.  goes 1 (least zoomed) to 20 (most zoomed)")    
+    parser.add_argument('--palette', default='Viridis', help="Palette to use.  Must be in bokeh.palettes.all_palettes")
+    parser.add_argument('--ncolors', type=int, default=256, 
+        help="Number of colors to use.  Must be able to access bokeh.palettes.all_palettes[<palette>][<ncolors>]")
+    parser.add_argument('--cbar_min', default=15, type=float)
+    parser.add_argument('--cbar_max', default=75, type=float)
+    
+    args = parser.parse_args()
+    
+    config, timezome = load_config(args.config_filename)
+    api_key = config['api_key']
 
-color_mapper = LinearColorMapper(palette=Viridis256, low=15, high=75)
-for name in names:
-    for destkey in ['towork', 'tohome']:
-        key = f'{name}_{destkey}'
-        colors = data[key]
+    with open(args.pickle_dump, 'rb') as f:
+        print(f"Loading from {args.pickle_dump}")
+        data = pickle.load(f)
 
-        plot = bk.gmap(api_key, map_options=moptions, title=restructure_key(key))
-        plot.add_tools(PanTool(), WheelZoomTool(), BoxSelectTool(), HoverTool(), 
-                ResetTool())
+    center_lats = np.array(data.pop('lat'))
+    center_longs = np.array(data.pop('long'))
+    names = set(k.split('_')[0] for k in data)
 
-        # source_patches = bk.ColumnDataSource(
-        #     data=dict(xs=longs, ys=lats,
-        #               colors=colors, **dsets))
+    dx = np.max(center_longs[1:] - center_longs[:-1])/2
+    dy = np.max(center_lats[1:] - center_lats[:-1])/2
 
-        # patches_glyph = plot.square('xs', 'ys', 
-        #     fill_color={"field": "colors", "transform": color_mapper},
-        #     line_color='black', line_width=0.25, source=source_patches)
+    xcoords = [[xc-dx, xc-dx, xc+dx, xc+dx] for xc in center_longs]
+    ycoords = [[yc-dy, yc+dy, yc+dy, yc-dy] for yc in center_lats]
+    print(f"Plotting {len(xcoords)} squares")
 
-        source_patches = bk.ColumnDataSource(
-            data=dict(xs=xcoords, ys=ycoords,
-                      colors=colors))
-        patches_glyph = plot.patches('xs', 'ys', fill_alpha=0.5, 
-            fill_color={"field": "colors", "transform": color_mapper},
-            line_color='black', line_width=0.25, source=source_patches)
+    plots = []
+    bk.output_file(args.output_file, title="Commute times") , #mode="inlne")
+    moptions = GMapOptions(lat=args.center_lat, lng=args.center_lng, 
+        zoom=args.zoom, map_type=args.map_type)
 
-        # # patches = Patches(xs="xs", ys="ys", fill_alpha=0.5,
-        # #                  fill_color={"field": "colors", "transform": color_mapper},
-        # #                  line_color='black', line_width=0.25)
-        # # patches_glyph = plot.add_glyph(source_patches, patches)
+    allkeys = [f'{name}_{destkey}' for name, destkey in product(names, ['towork', 'tohome'])]
+    dsets = {restructure_key(key): data[key] for key in allkeys}
 
+    color_mapper = LinearColorMapper(palette=all_palettes[args.palette][args.ncolors], 
+        low=args.cbar_min, high=args.cbar_max)
 
-        hover = plot.select(dict(type=HoverTool))
-        hover.tooltips = None
-        # hover.tooltips = OrderedDict([
-        #     (k, "@"+k) for k in dsets])
+    for name in names:
+        for destkey in ['towork', 'tohome']:
+            key = f'{name}_{destkey}'
+            colors = data[key]
+            plots.append(plot_patches_on_gmap(xcoords, ycoords, colors, 
+                api_key, map_options=moptions, title=restructure_key(key),
+                color_mapper=color_mapper))
 
-        color_bar = ColorBar(color_mapper=color_mapper, border_line_color=None, location=(0,0))
-        plot.add_layout(color_bar, 'right')
-        plots.append(plot)
+    grid = gridplot(plots, ncols=2)
+    bk.show(grid)
 
-grid = gridplot(plots, ncols=2)
-bk.show(grid)
+if __name__ == "__main__":
+    main()
 

@@ -1,31 +1,18 @@
-import numpy as np
 from collections import defaultdict
-import os, yaml, pytz, pickle, argparse
+import os
+import yaml
+import pytz
+import pickle
+import argparse
 from tqdm import tqdm
 
-basedir = os.path.realpath(__file__).rsplit('/', 1)[0]
-api_file = basedir+'/api_key'
-pifile = basedir+'/private_info.txt'
-
-with open(api_file, 'r') as f:
-    key = f.readline()
-
-with open(pifile, 'r') as f:
-    local_info = yaml.load(f)
-
-if 'timezone' in local_info:
-    timezone = pytz.timezone(local_info.pop('timezone'))
-else:
-    import tzlocal
-    timezone = tzlocal.get_localzone()
-
+import numpy as np
 import shapely.vectorized
 import shapely.geometry as sgeom
 import cartopy.io.shapereader as shpreader
 
 from query_commute_times import CommuteTimesClass
-CommuteTimes = CommuteTimesClass(key=key)
-
+from load_config import load_config
 
 ## all of CA:
 # northern_limit, western_limit = [42.263522, -125.653625]
@@ -34,6 +21,8 @@ CommuteTimes = CommuteTimesClass(key=key)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('outname')
+    parser.add_argument('--config_filename', default=None, help="File with api key, commutes, and optionally timezone")
+    parser.add_argument('--state_name', default="California", help="State to use for the boundary to distinguish land from water")
     parser.add_argument('--npts', default=10, type=int)
     parser.add_argument('--northern_limit', default=34.219498, type=float)
     parser.add_argument('--southern_limit', default=33.816168, type=float)
@@ -42,14 +31,18 @@ def main():
 
     args = parser.parse_args()
 
+    config, timezome = load_config(args.config_filename)
+    CommuteTimes = CommuteTimesClass(key=config['api_key'])
+    commutes = config['commutes']
+
     shpfilename = shpreader.natural_earth(resolution='10m',
                                           category='cultural',
                                           name='admin_1_states_provinces')
     reader = shpreader.Reader(shpfilename)
     states = list(reader.records())
 
-    CA, = [state for state in states if state.attributes['name'] == 'California']
-    geom = CA.geometry
+    state, = [state for state in states if state.attributes['name'] == args.state_name]
+    geom = state.geometry
 
     xv = np.linspace(args.western_limit, args.eastern_limit, args.npts)
     yv = np.linspace(args.southern_limit, args.northern_limit, args.npts)
@@ -58,17 +51,16 @@ def main():
     mask = shapely.vectorized.contains(geom, xvals, yvals)
 
     result = defaultdict(list)
-    names = local_info.keys()
-
-    reskeys = [n+'_towork' for n in names] + [n+'_tohome' for n in names]
+    names = commutes.keys()
 
     for ii, (ll, la) in enumerate(tqdm(pairs)):
         if mask[ii]:
             try:
                 address = f'{la},{ll}'
 
-                res = CommuteTimes.get_commute_times(address, local_info, 
+                res = CommuteTimes.get_commute_times(address, commutes, 
                     2019, 8, 7, 2, timezone, models=['best_guess'], 
+
                     do_print=False, do_pbar=False)
 
                 result['lat'].append(la)
@@ -77,12 +69,6 @@ def main():
                     result[key].append(res[key])
             except ValueError:
                 pass
-        #     except ValueError:
-        #         for key in reskeys:
-        #             result[key].append(np.nan)
-        # else:
-        #     for key in reskeys:
-        #         result[key].append(np.nan)
 
     print(f"Writing output to {args.outname}...")
     with open(args.outname, 'wb') as out:
