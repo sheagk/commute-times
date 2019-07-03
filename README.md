@@ -76,7 +76,7 @@ of the arguments.  There are two required args, the name of the pickle file that
 you created with `build_commute_grid.py`, and the name of the output file you want
 to create (will be an html webpage).  Most of the optional arguments are 
 self-explanatory, except perhaps `center_lat` and `center_lng` -- these set the 
-initial center of the map.  If these (independently) are aren't set as valid 
+initial center of the map.  If either of these are not (independently) set as valid 
 floats, then the code will default to the center of the grid.
 
 Run the code, and it should open up a file in your browser that contains a map 
