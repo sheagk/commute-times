@@ -1,6 +1,19 @@
 # commute-times
 Uses Google's Directions API to calculate commute times to/from potential homes
 
+## Dependencies:
+
+All functions will require `requests`, `tqdm`, `datetime`, `pyyaml`, and `pytz`.  
+If you don't want to set your timezone by hand (see below), you'll also need 
+`tzlocal`.
+
+The grid search will additionally require `numpy`.  If you want to bound the search
+to be within a state's boundaries (e.g. if you want to exclude the ocean from your
+search), then you'll also need `shapely` and `cartopy`.
+
+Finally, `bokeh` is required to plot the results of the grid search overtop a Google
+Maps instance.
+
 ## Usage:
 
 There are two main ways to use these tools.  In either case, you must first setup
