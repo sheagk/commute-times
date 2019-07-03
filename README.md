@@ -40,6 +40,7 @@ each of the scripts as `-c <path/to/file>`.
 
 Simply call `python commute_times.py` with the address you want to calculate 
 commute times relative to (i.e. the address of a house/apartment for sale/rent).  
+
 Use `python commute_times.py --help` to see the available options, which include
 the period of time over which the commute will be calculated, which model to 
 print the final summary for, and the path to the configuration filename.
@@ -67,7 +68,8 @@ of points (`npts`) are both important optional arguments.  You should also set
 the name of the state that you want to bound the points within (usually to 
 separate land from water), or you can set to `None` (as a string) to skip this 
 step (e.g. for a completely land area).  Once you've set all your args (perferably 
-with a low `npts` to start), fire off the script and wait for it to finish.
+with a low `npts` to start, something like 3 - 5), fire off the script and wait 
+for it to finish.
 
 Next you'll want to plot the result.  Call `plot_commute_grid.py` to get a sense
 of the arguments.  There are two required args, the name of the pickle file that
@@ -77,12 +79,15 @@ self-explanatory, except perhaps `center_lat` and `center_lng` -- these set the
 initial center of the map.  If these (independently) are aren't set as valid 
 floats, then the code will default to the center of the grid.
 
-Once you're satisfied with your grid and think everything is working ok, go ahead 
-and up the number of points in your search, and have fun!
+Run the code, and it should open up a file in your browser that contains a map 
+of the number of minutes each person's commute to and from work is expected to 
+take.  The code will also create a map that shows the "happy place," defined as 
+the region where all of the commutes are less than some specified length (which 
+defaults to 45 minutes).  The red area will have at least 2 "unhappy" commutes
+(and are thus ruled out) while the orange areas have exactly one unhappy commute.
 
-
-
-
-
-
-
+Your first go with only a few grid points probably won't be very useful -- it'll
+be too coarse-grained to really show you anything.  Once you're satisfied with the
+boundaries of the grid, go ahead and rerun `build_commute_grid.py` with a larger
+number for `npts` (probably something like 25 - 50), then rerun `plot_commute_grid.py`
+and find your happy place!
